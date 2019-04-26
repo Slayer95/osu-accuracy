@@ -4,7 +4,7 @@
   "description": "Calculate accuracy as a tuple of medians",
   "main": "osu-accuracy.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "eslint --cache ."
   },
   "repository": {
     "type": "git",
@@ -24,5 +24,8 @@
   "dependencies": {
     "nodesu": "^0.6.5",
     "ojsama": "^1.2.1"
+  },
+  "devDependencies": {
+    "eslint": "^5.16.0"
   }
 }
