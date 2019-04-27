@@ -22,8 +22,6 @@ You will need to place a file named ``.osu-api-key.txt`` in the ``osu-accuracy``
 If you are an avid ``osu!`` player, this software will get an excellent performance boost if you let it know the location of ``osu!``, in the
 environment variable ``OSU_PATH``.
 
-2. Install dependencies with ``npm install``.
-
 Usage
 ------------------------------------------------------------------------
 
