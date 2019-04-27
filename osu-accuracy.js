@@ -1,10 +1,9 @@
 "use strict";
 
-const fs = require('fs');
-const path = require('path');
+const util = require('./lib/util');
+const Profiler = require('./lib/profiler');
 
 const api = require('./api');
-const util = require('./util');
 const CACHE = require('./cache');
 const BeatMaps = require('./beatmaps');
 
@@ -26,26 +25,47 @@ function getMedianAccuracy(scoresList) {
 	return (scoresList[halfLength - 1].accuracy + scoresList[halfLength].accuracy) / 2;
 }
 
+async function fillPlayerPerformance(scoresList, sequential) {
+	if (sequential) {
+		for (const playData of scoresList) {
+			playData.accuracy = util.getAccuracy(playData);
+			try {
+				playData.maxpp = await BeatMaps.getModdedMaxPP(util.nodesu2ojsamaScore(playData));
+			} catch (err) {
+				Profiler.log('score_failure');
+			}
+		}
+	} else {
+		Profiler.setParallel(true);
+		const queries = [];
+		for (const playData of scoresList) {
+			playData.accuracy = util.getAccuracy(playData);
+			queries.push(BeatMaps.getModdedMaxPP(util.nodesu2ojsamaScore(playData)).catch(err => (Profiler.log('score_failure'), null)));
+		}
+		const maxPPs = await Promise.all(queries);
+		Profiler.setParallel(false);
+
+		for (let i = 0; i < maxPPs.length; i++) {
+			scoresList[i].maxpp = maxPPs[i];
+		}
+	}
+}
+
 async function fetchPlayerPerformance(userId) {
 	const {client, constants} = api.nodesu;
+
+	let t = process.hrtime();
 	const [userData, topPlays] = await Promise.all([
 		client.user.get(userId, constants.MODE.osu, 0, constants.LOOKUP_TYPE.string),
 		client.user.getBest(userId, constants.MODE.osu, 100, constants.LOOKUP_TYPE.string),
 	]);
+	Profiler.logN('osu_api', 2, t);
 
 	if (!userData || !topPlays || !topPlays.length) {
 		return null;
 	}
 
-	for (const playData of topPlays) {;
-		try {
-			playData.maxpp = await BeatMaps.getModdedMaxPP(util.nodesu2ojsamaScore(playData));
-			playData.accuracy = util.getAccuracy(playData);
-		} catch (err) {
-			// console.log(err.stack);
-			// e.g. HTTP 429: Too many requests
-		}
-	}
+	await fillPlayerPerformance(topPlays, false); // false = parallel, true = sequential
 
 	return {
 		pp: Math.round(userData.pp_raw),
@@ -59,6 +79,8 @@ async function getPlayerAccuracyVariants(userId) {
 	const playerPerformance = await fetchPlayerPerformance(userId);
 	if (!playerPerformance) return null;
 
+	const t = process.hrtime();
+
 	playerPerformance.topPlays.sort(Collator.difficulty);
 
 	const easyPlays = playerPerformance.topPlays.splice(Math.ceil(playerPerformance.topPlays.length / 2)).sort(Collator.accuracy);
@@ -70,6 +92,8 @@ async function getPlayerAccuracyVariants(userId) {
 		offset: 0,
 		list: [0, 0],
 	}, 0);
+
+	Profiler.log('accuracy_calc', t);
 
 	return {
 		stable: stableAccuracy,
@@ -89,6 +113,7 @@ async function runCli() {
 		throw new Error(`Specify the user names as a command line argument (comma-separated list)`);
 	}
 
+	const t = process.hrtime();
 	CACHE.start();
 
 	const CELL_SIZES = [25, 13, 17/*, 4*/];
@@ -118,11 +143,13 @@ async function runCli() {
 		console.log(formatRow(cells));
 	}
 
+	Profiler.log('app_total', t);
+
+	console.log(`\n${Profiler}`);
 }
 
 process.on('unhandledRejection', function (err) {
 	throw err;
 });
 
-// node osu-accuracy "AngelJuega1,BeowulF97,Ego MS, iRedak-, Jiandae, XinCrin"
 runCli();

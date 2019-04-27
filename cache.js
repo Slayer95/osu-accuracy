@@ -3,86 +3,131 @@
 const fs = require('fs');
 const path = require('path');
 
-const SAVE_MAP_STATUS = {
-	IDLE: 0,
-	ACTIVE: 1,
-	QUEUED: 2,
-};
-
-class AutoSaveMap extends Map {
-	constructor(iterable, path) {
-		super(iterable);
-		this.path = path;
-		this.status = SAVE_MAP_STATUS.IDLE;
-	}
-
-	set(key, value) {
-		super.set(key, value);
-		this.save();
-	}
-
-	save() {
-		switch (this.status) {
-		case SAVE_MAP_STATUS.QUEUED:
-			break;
-		case SAVE_MAP_STATUS.ACTIVE:
-			this.status = SAVE_MAP_STATUS.QUEUED;
-			break;
-		case SAVE_MAP_STATUS.IDLE:
-			// this.status = SAVE_MAP_STATUS.ACTIVE;
-			this.doSave();
-		}
-	}
-
-	doSave() {
-		this.status = SAVE_MAP_STATUS.ACTIVE;
-		fs.writeFile(`${this.path}.0`, JSON.stringify(this), err => {
-			if (err) throw err;
-			fs.rename(`${this.path}.0`, this.path, err2 => {
-				if (err2) throw err2;
-				if (this.status === SAVE_MAP_STATUS.QUEUED) {
-					setImmediate(() => this.doSave());
-				} else {
-					this.status = SAVE_MAP_STATUS.IDLE;
-				}
-			});
-		});
-	}
-
-	toJSON() {
-		return Array.from(this);
-	}
-}
+const AutoSaveMap = require('./lib/autosave-map');
+const Profiler = require('./lib/profiler');
 
 const CACHE = {
 	start: startCache,
 	fsSongsPath: '',
-	files: new Set(),
+	dbPath: '',
+
+	local_map_sets: new Set(),
+	metadata: new Map(),
 	difficulties: new Map(),
 };
 
-function startCache() {
+const CACHE_PATHS = {
+	metadata: path.resolve(__dirname, '.osu-map-metadata.json'),
+	difficulties: path.resolve(__dirname, '.osu-map-diffs.json'),
+	mtime: path.resolve(__dirname, '.osu-db-mtime.txt'),
+};
+
+const {
+	getBeatmapMetaLocalSync,
+} = require('./internal/beatmaps');
+
+function initPaths() {
+	let songFolders;
 	if (process.env.OSU_PATH) {
 		const songsPath = path.resolve(process.env.OSU_PATH, 'Songs');
-		const fileList = fs.readdirSync(songsPath).filter(folderName => (
+		songFolders = fs.readdirSync(songsPath).filter(folderName => (
 			/^\d$/.test(folderName.charAt(0)) &&
 			!/ \(\d+\)$/.test(folderName)
 		));
 
+		CACHE.local_map_sets = new Set(songFolders.map(folderName => Number(folderName.split(' ', 1)[0])));
 		CACHE.fsSongsPath = songsPath;
-		CACHE.files = new Set(fileList.map(folderName => Number(folderName.split(' ', 1)[0])));
+		CACHE.dbPath = path.resolve(process.env.OSU_PATH, 'osu!.db');
 	}
+	return songFolders;
+}
 
-	const difficultyCachePath = path.resolve(__dirname, '.osu-diffs.json');
-
+function initDifficulties() {
 	let difficultyJSON;
 	try {
-		difficultyJSON = JSON.parse(fs.readFileSync(difficultyCachePath, 'utf8'));
+		difficultyJSON = JSON.parse(fs.readFileSync(CACHE_PATHS.difficulties, 'utf8'));
 	} catch (err) {
 		difficultyJSON = [];
 	}
 
-	CACHE.difficulties = new AutoSaveMap(difficultyJSON, difficultyCachePath);
+	CACHE.difficulties = new AutoSaveMap(difficultyJSON, CACHE_PATHS.difficulties);
+}
+
+function initMetadata() {
+	let metadataJSON;
+	try {
+		metadataJSON = JSON.parse(fs.readFileSync(CACHE_PATHS.metadata, 'utf8'));
+	} catch (err) {
+		metadataJSON = [];
+	}
+
+	CACHE.metadata = new AutoSaveMap(metadataJSON, CACHE_PATHS.metadata);
+}
+
+function checkPopulateMetadata() {
+	const prevMTime = (() => {
+		try {
+			return +fs.readFileSync(CACHE_PATHS.mtime, 'utf8');
+		} catch (err) {
+			return 0;
+		}
+	})();
+	const mtime = (() => {
+		try {
+			return fs.statSync(CACHE.dbPath).mtimeMs;
+		} catch (err) {
+			return -1;
+		}
+	})();
+
+	if (mtime > prevMTime) {
+		return mtime;
+	}
+
+	return 0;
+}
+
+function populateMetadata(songFolders) {
+	for (const folderName of songFolders) {
+		const setId = Number(folderName.split(' ', 1)[0]);
+		if (setId < 60000) continue; // TODO: Figure out a better estimate for release of osu file format v10
+
+		for (const fileName of fs.readdirSync(path.resolve(CACHE.fsSongsPath, folderName))) {
+			if (!fileName.endsWith('.osu')) continue;
+
+			const metaData = getBeatmapMetaLocalSync(path.resolve(CACHE.fsSongsPath, folderName, fileName));
+			if (!metaData) {
+				// Non-issue so long as it happens with less than 1% frequency.
+				Profiler.log('osu_metadata_failure');
+				return;
+			}
+
+			const mapId = metaData[0];
+			metaData[0] = setId;
+
+			CACHE.metadata.set(mapId, metaData);
+		}
+	}
+}
+
+function startCache() {
+	let t = process.hrtime();
+
+	const songFolders = initPaths();
+	initDifficulties();
+	initMetadata();
+
+	Profiler.log('cache_load', t);
+
+	if (songFolders) {
+		const mtime = checkPopulateMetadata();
+		if (mtime) {
+			t = process.hrtime();
+			populateMetadata(songFolders);
+			fs.writeFileSync(CACHE_PATHS.mtime, `${mtime}`);
+			Profiler.log('cache_populate', t);
+		}
+	}
 }
 
 module.exports = CACHE;
