@@ -38,6 +38,8 @@ function initPaths() {
 		CACHE.local_map_sets = new Set(songFolders.map(folderName => Number(folderName.split(' ', 1)[0])));
 		CACHE.fsSongsPath = songsPath;
 		CACHE.dbPath = path.resolve(process.env.OSU_PATH, 'osu!.db');
+	} else {
+		console.error(`WARNING: %OSU_PATH% not set, performance will drop`);
 	}
 	return songFolders;
 }
@@ -98,7 +100,7 @@ function populateMetadata(songFolders) {
 			const metaData = getBeatmapMetaLocalSync(path.resolve(CACHE.fsSongsPath, folderName, fileName));
 			if (!metaData) {
 				// Non-issue so long as it happens with less than 1% frequency.
-				Profiler.log('osu_metadata_failure');
+				Profiler.log('cache_metadata_failure');
 				return;
 			}
 

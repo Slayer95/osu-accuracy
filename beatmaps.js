@@ -74,7 +74,7 @@ async function getBeatmapReadable(mapId) {
 	try {
 		return await getBeatmapReadableLocal(mapId, metaData);
 	} catch (err) {
-		// console.log(`MISS ${mapId} at /${folderName}/${fileName}`);
+		Profiler.logSync('osu_fs_parser_miss');
 		return getBeatmapReadableRemote(mapId);
 	}
 }
