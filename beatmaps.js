@@ -91,7 +91,7 @@ async function getBeatmap(mapId) {
 }
 
 async function getModdedBeatmapMaxPP(playData) {
-	const {mapId /* number */, mods} = playData;
+	const {mapId /* number */, mods /* number */} = playData; // eslint-disable-line object-curly-spacing
 	const cacheTag = `${mapId},${mods}`;
 
 	if (CACHE.difficulties.has(cacheTag)) {
