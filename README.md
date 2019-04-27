@@ -8,11 +8,12 @@ This project exists as an experiment to develop alternatives to the [deficient](
 
 The demonstration is implemented through a command-line interface in the [Node.js](https://nodejs.org) platform.
 
-Installing
+Installation
 ------------------------------------------------------------------------
 
 1. Install [Node.js](https://nodejs.org/).
-2. Install dependencies with ``npm install``.
+2. Clone this repository.
+3. Enter the repository and install dependencies with ``npm install``.
 
 Configuration
 ------------------------------------------------------------------------
