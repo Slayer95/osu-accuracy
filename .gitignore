@@ -1,4 +1,3 @@
-.osu-api-key.txt
-.osu-diffs.json
-.eslintcache
+.*
+!.gitignore
 node_modules
