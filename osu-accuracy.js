@@ -53,7 +53,7 @@ async function fillPlayerPerformance(scoresList, sequential) {
 	}
 }
 
-async function fetchPlayerPerformance(userId) {
+async function fetchPlayerPerformanceData(userId) {
 	const {client, constants} = api.nodesu;
 
 	let t = process.hrtime();
@@ -70,15 +70,15 @@ async function fetchPlayerPerformance(userId) {
 	await fillPlayerPerformance(topPlays, false); // false = parallel, true = sequential
 
 	return {
-		pp: Math.round(userData.pp_raw),
+		pp: Math.round(userData.ppRaw),
 		accuracy: userData.accuracy / 100,
 		level: userData.level,
 		topPlays: topPlays.filter(playData => playData.maxpp && playData.accuracy),
 	};
 }
 
-async function getPlayerAccuracyVariants(userId) {
-	const playerPerformance = await fetchPlayerPerformance(userId);
+async function getPlayerPerformanceMetrics(userId) {
+	const playerPerformance = await fetchPlayerPerformanceData(userId);
 	if (!playerPerformance) return null;
 
 	const t = process.hrtime();
@@ -98,9 +98,13 @@ async function getPlayerAccuracyVariants(userId) {
 	Profiler.log('accuracy_calc', t);
 
 	return {
-		stable: stableAccuracy,
-		range: rangeAccuracy,
-		rangeMulti: rangeMultiAccuracy,
+		pp: playerPerformance.pp,
+		accuracy: {
+			stable: stableAccuracy,
+			range: rangeAccuracy,
+			rangeMulti: rangeMultiAccuracy,
+		},
+		level: playerPerformance.level,
 	};
 }
 
@@ -118,27 +122,28 @@ async function runCli() {
 	const t = process.hrtime();
 	CACHE.start();
 
-	const CELL_SIZES = [25, 13, 17/*, 4*/];
+	const CELL_SIZES = [25, 6, 13, 17/*, 4*/];
 	const formatCell = (cell, index) => util.padString(` ${cell}`, CELL_SIZES[index]);
 	const formatRow = row => row.map(formatCell).join(`|`);
 
-	const headers = [`osu! username`, `Stable acc.`, `Range acc.`/*, `?`*/];
+	const headers = [`osu! username`, `pp`, `Stable acc.`, `Range acc.`/*, `?`*/];
 	console.log(formatRow(headers));
-	console.log(Array.from({length: /*4*/3}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
+	console.log(Array.from({length: /*5*/4}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
 
 	for (const userName of userList) {
-		const result = await getPlayerAccuracyVariants(userName);
+		const result = await getPlayerPerformanceMetrics(userName);
 		const cells = [userName, `N/A`, `N/A`/*, `N/A`*/];
 		if (!result) {
 			console.log(formatRow(cells));
 			continue;
 		}
-		cells[1] = util.toPercent(result.stable);
-		cells[2] = result.range.map(util.toPercent).join(' -> ');
+		cells[1] = `${result.pp}`;
+		cells[2] = util.toPercent(result.accuracy.stable);
+		cells[3] = result.accuracy.range.map(util.toPercent).join(' -> ');
 
 		/*
 		if (result.rangeMulti) {
-			cells[3] = `(${result.rangeMulti.offset})${result.rangeMulti.map(util.toPercent).join(', ')}`;
+			cells[4] = `(${result.accuracy.rangeMulti.offset})${result.rangeMulti.map(util.toPercent).join(', ')}`;
 		}
 		//*/
 
