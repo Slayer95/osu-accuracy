@@ -13,10 +13,6 @@ const Splitter = require('./lib/stream-splitter');
 
 const CACHE = require('./cache');
 
-const {
-	getBeatmapMetaLocalSync,
-} = require('./internal/beatmaps');
-
 http.globalAgent.keepAlive = true;
 http.globalAgent.maxSockets = 32;
 https.globalAgent.keepAlive = true;
@@ -70,7 +66,6 @@ async function getBeatmapReadable(mapId) {
 		CACHE.metadata.set(mapId, [metaData.setId, metaData.artist, metaData.title, metaData.creator, metaData.version]);
 	}
 
-	
 
 	if (!CACHE.local_map_sets.has(metaData.setId)) {
 		return getBeatmapReadableRemote(mapId);
