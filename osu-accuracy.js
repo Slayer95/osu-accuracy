@@ -83,6 +83,9 @@ async function getPlayerPerformanceMetrics(userId) {
 
 	const t = process.hrtime();
 
+	playerPerformance.topPlays.sort(Collator.accuracy);
+	const medianAccuracy = getMedianAccuracy(playerPerformance.topPlays)
+
 	playerPerformance.topPlays.sort(Collator.difficulty);
 
 	const easyPlays = playerPerformance.topPlays.splice(Math.ceil(playerPerformance.topPlays.length / 2)).sort(Collator.accuracy);
@@ -101,6 +104,7 @@ async function getPlayerPerformanceMetrics(userId) {
 		pp: playerPerformance.pp,
 		accuracy: {
 			stable: stableAccuracy,
+			median: medianAccuracy,
 			range: rangeAccuracy,
 			rangeMulti: rangeMultiAccuracy,
 		},
@@ -122,28 +126,29 @@ async function runCli() {
 	const t = process.hrtime();
 	CACHE.start();
 
-	const CELL_SIZES = [25, 6, 13, 17/*, 4*/];
+	const CELL_SIZES = [25, 6, 13, 13, 17/*, 4*/];
 	const formatCell = (cell, index) => util.padString(` ${cell}`, CELL_SIZES[index]);
 	const formatRow = row => row.map(formatCell).join(`|`);
 
-	const headers = [`osu! username`, `pp`, `Stable acc.`, `Range acc.`/*, `?`*/];
+	const headers = [`osu! username`, `pp`, `Stable acc.`, `Median acc.`, `Range acc.`/*, `?`*/];
 	console.log(formatRow(headers));
-	console.log(Array.from({length: /*5*/4}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
+	console.log(Array.from({length: /*6*/5}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
 
 	for (const userName of userList) {
 		const result = await getPlayerPerformanceMetrics(userName);
-		const cells = [userName, `N/A`, `N/A`/*, `N/A`*/];
+		const cells = [userName, `N/A`, `N/A`, `N/A`, `N/A`/*, `N/A`*/];
 		if (!result) {
 			console.log(formatRow(cells));
 			continue;
 		}
 		cells[1] = `${result.pp}`;
 		cells[2] = util.toPercent(result.accuracy.stable);
-		cells[3] = result.accuracy.range.map(util.toPercent).join(' -> ');
+		cells[3] = util.toPercent(result.accuracy.median);
+		cells[4] = result.accuracy.range.map(util.toPercent).join(' -> ');
 
 		/*
 		if (result.rangeMulti) {
-			cells[4] = `(${result.accuracy.rangeMulti.offset})${result.rangeMulti.map(util.toPercent).join(', ')}`;
+			cells[5] = `(${result.accuracy.rangeMulti.offset})${result.rangeMulti.map(util.toPercent).join(', ')}`;
 		}
 		//*/
 
