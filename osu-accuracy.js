@@ -38,6 +38,7 @@ async function fillPlayerPerformance(scoresList, sequential) {
 	} else {
 		Profiler.setParallel(true);
 		const queries = [];
+		util.shuffle(scoresList); // So that failures average out
 		for (const playData of scoresList) {
 			playData.accuracy = util.getAccuracy(playData);
 			// eslint-disable-next-line no-sequences

@@ -13,10 +13,9 @@ const Splitter = require('./lib/stream-splitter');
 
 const CACHE = require('./cache');
 
-http.globalAgent.keepAlive = true;
-http.globalAgent.maxSockets = 32;
+// Applies to nodesu as well
 https.globalAgent.keepAlive = true;
-https.globalAgent.maxSockets = 32;
+https.globalAgent.maxSockets = 8;
 
 async function getBeatmapMetaRemote(mapId) {
 	const t = process.hrtime();
