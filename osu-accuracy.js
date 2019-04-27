@@ -41,7 +41,7 @@ async function fillPlayerPerformance(scoresList, sequential) {
 		for (const playData of scoresList) {
 			playData.accuracy = util.getAccuracy(playData);
 			// eslint-disable-next-line no-sequences
-			queries.push(BeatMaps.getModdedMaxPP(util.nodesu2ojsamaScore(playData)).catch(err => (Profiler.log('score_failure'), null)));
+			queries.push(BeatMaps.getModdedMaxPP(util.nodesu2ojsamaScore(playData)).catch(err => (Profiler.logSync('score_failure'), null)));
 		}
 		const maxPPs = await Promise.all(queries);
 		Profiler.setParallel(false);
