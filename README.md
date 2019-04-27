@@ -30,3 +30,10 @@ Usage
 	node osu-accuracy osu!name
 
 	node osu-accuracy "user1, user2, user3, user4"
+
+License
+------------------------------------------------------------------------
+
+``osu-accuracy`` is licensed under the terms of the [MIT License][1].
+
+  [1]: https://github.com/Slayer95/osu-accuracy/blob/master/LICENSE
