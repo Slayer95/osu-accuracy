@@ -25,6 +25,16 @@ function getMedianAccuracy(scoresList) {
 	return (scoresList[halfLength - 1].accuracy + scoresList[halfLength].accuracy) / 2;
 }
 
+function getIQRAccuracy(scoresList) {
+	if (!scoresList.length) return [];
+
+	const modulus = scoresList.length % 2;
+	const halfLength = (scoresList.length - modulus) / 2;
+
+	const sets = [scoresList.slice(0, halfLength), scoresList.slice(-halfLength)];
+	return sets.map(getMedianAccuracy);
+}
+
 async function fillPlayerPerformance(scoresList, sequential) {
 	if (sequential) {
 		for (const playData of scoresList) {
@@ -83,8 +93,14 @@ async function getPlayerPerformanceMetrics(userId) {
 
 	const t = process.hrtime();
 
+	const minPP = Math.min(...playerPerformance.topPlays.map(x => x.maxpp));
+	const maxPP = Math.max(...playerPerformance.topPlays.map(x => x.maxpp));
+
 	playerPerformance.topPlays.sort(Collator.accuracy);
-	const medianAccuracy = getMedianAccuracy(playerPerformance.topPlays)
+	const minAccuracy = Math.min(...playerPerformance.topPlays.map(x => x.accuracy));
+	const maxAccuracy = Math.max(...playerPerformance.topPlays.map(x => x.accuracy));
+	const medianAccuracy = getMedianAccuracy(playerPerformance.topPlays);
+	const iqrAccuracy = getIQRAccuracy(playerPerformance.topPlays);
 
 	playerPerformance.topPlays.sort(Collator.difficulty);
 
@@ -102,10 +118,14 @@ async function getPlayerPerformanceMetrics(userId) {
 
 	return {
 		pp: playerPerformance.pp,
+		ppRange: [minPP, maxPP].map(x => Math.round(x)),
 		accuracy: {
+			min: minAccuracy,
+			max: maxAccuracy,
 			stable: stableAccuracy,
 			median: medianAccuracy,
 			range: rangeAccuracy,
+			iqr: iqrAccuracy,
 			rangeMulti: rangeMultiAccuracy,
 		},
 		level: playerPerformance.level,
@@ -126,29 +146,30 @@ async function runCli() {
 	const t = process.hrtime();
 	CACHE.start();
 
-	const CELL_SIZES = [25, 6, 13, 13, 17/*, 4*/];
+	const CELL_SIZES = [18, 19, 13, 13, 19, 19/*, 4*/];
 	const formatCell = (cell, index) => util.padString(` ${cell}`, CELL_SIZES[index]);
 	const formatRow = row => row.map(formatCell).join(`|`);
 
-	const headers = [`osu! username`, `pp`, `Stable acc.`, `Median acc.`, `Range acc.`/*, `?`*/];
+	const headers = [`osu! username`, `pp, diff. range`, `Stable acc.`, `Median acc.`, `Range acc.`, `IQR acc.`/*, `?`*/];
 	console.log(formatRow(headers));
-	console.log(Array.from({length: /*6*/5}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
+	console.log(Array.from({length: /*7*/6}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
 
 	for (const userName of userList) {
 		const result = await getPlayerPerformanceMetrics(userName);
-		const cells = [userName, `N/A`, `N/A`, `N/A`, `N/A`/*, `N/A`*/];
+		const cells = [userName, `N/A`, `N/A`, `N/A`, `N/A`, `N/A`/*, `N/A`*/];
 		if (!result) {
 			console.log(formatRow(cells));
 			continue;
 		}
-		cells[1] = `${result.pp}`;
+		cells[1] = `${result.pp} [${result.ppRange.join(', ')}]`;
 		cells[2] = util.toPercent(result.accuracy.stable);
 		cells[3] = util.toPercent(result.accuracy.median);
 		cells[4] = result.accuracy.range.map(util.toPercent).join(' -> ');
+		cells[5] = result.accuracy.iqr.map(util.toPercent).join(', ');
 
 		/*
 		if (result.rangeMulti) {
-			cells[5] = `(${result.accuracy.rangeMulti.offset})${result.rangeMulti.map(util.toPercent).join(', ')}`;
+			cells[6] = `(${result.accuracy.rangeMulti.offset})${result.rangeMulti.map(util.toPercent).join(', ')}`;
 		}
 		//*/
 
