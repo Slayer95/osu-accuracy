@@ -12,8 +12,18 @@ const Collator = {
 	accuracy: (a, b) => a.accuracy - b.accuracy, // Ascendent
 };
 
+function getAverageAccuracy(scoresList) {
+	if (!scoresList.length) return NaN;
+	let sum = 0;
+	for (const playData of scoresList) {
+		sum += playData.accuracy;
+	}
+
+	return sum / scoresList.length;
+}
+
 function getMedianAccuracy(scoresList) {
-	if (!scoresList.length) return 0;
+	if (!scoresList.length) return NaN;
 
 	const modulus = scoresList.length % 2;
 	const halfLength = (scoresList.length - modulus) / 2;
@@ -33,6 +43,30 @@ function getIQRAccuracy(scoresList) {
 
 	const sets = [scoresList.slice(0, halfLength), scoresList.slice(-halfLength)];
 	return sets.map(getMedianAccuracy);
+}
+
+function getIQMAccuracy(scoresList) {
+	const modulus = scoresList.length % 4;
+	const outerSize = (scoresList.length - modulus) / 4;
+
+	scoresList = scoresList.slice(outerSize, scoresList.length - outerSize);
+	if (!modulus) {
+		return getAverageAccuracy(scoresList);
+	}
+
+	const limitPlays = [scoresList.pop(), scoresList.shift()];
+	const innerPlays = scoresList;
+
+	const limitWeight = 1 - modulus / 4;
+	const totalWeight = innerPlays.length +  2 - modulus / 2;
+
+	let sum = 0;
+	for (const playData of innerPlays) {
+		sum += playData.accuracy;
+	}
+	sum += limitPlays[0].accuracy * limitWeight;
+	sum += limitPlays[1].accuracy * limitWeight;
+	return sum / totalWeight;
 }
 
 async function fillPlayerPerformance(scoresList, sequential) {
@@ -102,17 +136,17 @@ async function getPlayerPerformanceMetrics(userId) {
 	const medianAccuracy = getMedianAccuracy(playerPerformance.topPlays);
 	const iqrAccuracy = getIQRAccuracy(playerPerformance.topPlays);
 
+	const meanAccuracy = getAverageAccuracy(playerPerformance.topPlays);
+	const iqmAccuracy = getIQMAccuracy(playerPerformance.topPlays);
+
 	playerPerformance.topPlays.sort(Collator.difficulty);
 
 	const easyPlays = playerPerformance.topPlays.splice(Math.ceil(playerPerformance.topPlays.length / 2)).sort(Collator.accuracy);
 	const hardPlays = playerPerformance.topPlays.sort(Collator.accuracy);
 
 	const stableAccuracy = playerPerformance.accuracy;
-	const rangeAccuracy = [easyPlays, hardPlays].map(getMedianAccuracy);
-	const rangeMultiAccuracy = await ({
-		offset: 0,
-		list: [0, 0],
-	}, 0);
+	const splitMedianAccuracy = [easyPlays, hardPlays].map(getMedianAccuracy);
+	const splitIQMAccuracy = [easyPlays, hardPlays].map(getIQMAccuracy);
 
 	Profiler.log('accuracy_calc', t);
 
@@ -123,10 +157,12 @@ async function getPlayerPerformanceMetrics(userId) {
 			min: minAccuracy,
 			max: maxAccuracy,
 			stable: stableAccuracy,
+			mean: meanAccuracy,
 			median: medianAccuracy,
-			range: rangeAccuracy,
+			iqm: iqmAccuracy,
+			splitMedian: splitMedianAccuracy,
+			splitIQM: splitIQMAccuracy,
 			iqr: iqrAccuracy,
-			rangeMulti: rangeMultiAccuracy,
 		},
 		level: playerPerformance.level,
 	};
@@ -146,32 +182,38 @@ async function runCli() {
 	const t = process.hrtime();
 	CACHE.start();
 
-	const CELL_SIZES = [18, 19, 13, 13, 19, 19/*, 4*/];
+	const Widths = {
+		NAME: 18,
+		PP: 19,
+		SINGLE: 8,
+		DOUBLE: 19,
+	};
+
+	const columnHeaders = [`osu! username`, `pp, diff. range`, `W. Mean`, `Mean`, `Median`, `IQM`, `Split median`, `Split IQM`, `IQR`];
+	const columnTypes = [`name`, `pp`, `single`, `single`, `single`, `single`, `double`, `double`, `double`];
+	const CELL_SIZES = columnTypes.map(type => Widths[type.toUpperCase()]);
 	const formatCell = (cell, index) => util.padString(` ${cell}`, CELL_SIZES[index]);
 	const formatRow = row => row.map(formatCell).join(`|`);
 
-	const headers = [`osu! username`, `pp, diff. range`, `Stable acc.`, `Median acc.`, `Range acc.`, `IQR acc.`/*, `?`*/];
-	console.log(formatRow(headers));
-	console.log(Array.from({length: /*7*/6}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
+	console.log(formatRow(columnHeaders));
+	console.log(Array.from({length: 9}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
 
 	for (const userName of userList) {
 		const result = await getPlayerPerformanceMetrics(userName);
-		const cells = [userName, `N/A`, `N/A`, `N/A`, `N/A`, `N/A`/*, `N/A`*/];
+		const cells = [userName, `N/A`, `N/A`, `N/A`, `N/A`, `N/A`, `N/A`, `N/A`, `N/A`];
 		if (!result) {
 			console.log(formatRow(cells));
 			continue;
 		}
+		const {stable, mean, median, iqm, splitMedian, splitIQM, iqr} = result.accuracy;
 		cells[1] = `${result.pp} [${result.ppRange.join(', ')}]`;
-		cells[2] = util.toPercent(result.accuracy.stable);
-		cells[3] = util.toPercent(result.accuracy.median);
-		cells[4] = result.accuracy.range.map(util.toPercent).join(' -> ');
-		cells[5] = result.accuracy.iqr.map(util.toPercent).join(', ');
-
-		/*
-		if (result.rangeMulti) {
-			cells[6] = `(${result.accuracy.rangeMulti.offset})${result.rangeMulti.map(util.toPercent).join(', ')}`;
-		}
-		//*/
+		cells[2] = util.toPercent(stable);
+		cells[3] = util.toPercent(mean);
+		cells[4] = util.toPercent(median);
+		cells[5] = util.toPercent(iqm);
+		cells[6] = splitMedian.map(util.toPercent).join(' -> ');
+		cells[7] = splitIQM.map(util.toPercent).join(' -> ');
+		cells[8] = iqr.reverse().map(util.toPercent).join(' -> ');
 
 		console.log(formatRow(cells));
 	}
