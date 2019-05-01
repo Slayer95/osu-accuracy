@@ -1,5 +1,7 @@
 "use strict";
 
+const minimist = require('minimist');
+
 const stats = require('./lib/stats');
 const util = require('./lib/util');
 const Profiler = require('./lib/profiler');
@@ -144,12 +146,13 @@ async function getPlayerPerformanceMetrics(userId) {
 }
 
 async function runCli() {
-	const [,, userInput] = process.argv;
-	if (!userInput) {
+	const argv = minimist(process.argv.slice(2));
+	if (!argv._.length) {
+		console.log(argv);
 		throw new Error(`Specify the user names as a command line argument (comma-separated list)`);
 	}
 
-	const userList = userInput.split(',').map(name => name.trim());
+	const userList = argv._[0].split(',').map(name => name.trim());
 	if (userList.some(userName => /[^a-z0-9_\s-]/i.test(userName))) {
 		throw new Error(`Specify the user names as a command line argument (comma-separated list)`);
 	}
@@ -166,40 +169,70 @@ async function runCli() {
 
 	const columnHeaders = [`osu! username`, `pp, diff. range`, `W. Mean`, `Mean`, `Median`, `IQM`, `Split median`, `Split IQM`, `IQR`, `LSQ`, `Theil-Sen`, `W. Theil-Sen`];
 	const columnTypes = [`name`, `pp`, `single`, `single`, `single`, `single`, `double`, `double`, `double`, `double`, `double`, `double`];
-	const CELL_SIZES = columnTypes.map(type => Widths[type.toUpperCase()]);
-	const formatCell = (cell, index) => util.padString(` ${cell}`, CELL_SIZES[index]);
-	const formatRow = row => row.map(formatCell).join(`|`);
+	const NULL_VALUES = Array.from({length: 12}, () => `N/A`);
 
-	console.log(formatRow(columnHeaders));
-	console.log(Array.from({length: 12}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
+	const CELL_SIZES = columnTypes.map(type => Widths[type.toUpperCase()]);
+	const formatMarkdownCell = (cell, index) => util.padString(` ${cell}`, CELL_SIZES[index]);
+	const formatCSVCell = cell => {
+		cell = cell.replace(/"/g, `""`);
+		if (/[,\n"]/.test(cell)) return `"${cell}"`;
+		return cell;
+	};
+
+	const formatMarkdownValues = values => values.map(formatMarkdownCell).join(`|`);
+	const formatCSVValues = values => values.map(formatCSVCell).join(`,`);
+	const formatDefaultValues = values => values.map((val, index) => `${columnHeaders[index]}: ${val}`).join(`\n`);
+
+	const formatValues = (() => {
+		switch (argv.format) {
+		case 'markdown': return formatMarkdownValues;
+		case 'csv': return formatCSVValues;
+		default: return formatDefaultValues;
+		}
+	})();
+
+	if (argv.format === 'markdown' || argv.format === 'csv') {
+		console.log(formatValues(columnHeaders));
+	}
+	if (argv.format === 'markdown') {
+		console.log(Array.from({length: 12}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
+	}
 
 	for (const userName of userList) {
 		const result = await getPlayerPerformanceMetrics(userName);
-		const cells = Array.from({length: 12}, (_, index) => index ? `N/A` : userName);
 		if (!result) {
-			console.log(formatRow(cells));
+			const values = NULL_VALUES.slice().fill(userName, 0, 1);
+			console.log(formatValues(values));
 			continue;
 		}
 		const {stable, mean, median, iqm, iqr} = result.accuracy;
 		const {splitMedian, splitIQM, linearRegression, theilSen, theilSenWeighted} = result.accuracyVsPP;
-		cells[1] = `${result.pp} [${result.ppRange.join(', ')}]`;
-		cells[2] = util.toPercent(stable);
-		cells[3] = util.toPercent(mean);
-		cells[4] = util.toPercent(median);
-		cells[5] = util.toPercent(iqm);
-		cells[6] = splitMedian.map(util.toPercent).join(' -> ');
-		cells[7] = splitIQM.map(util.toPercent).join(' -> ');
-		cells[8] = iqr.reverse().map(util.toPercent).join(' -> ');
-		cells[9] = util.formatFit(linearRegression);
-		cells[10] = util.formatFit(theilSen);
-		cells[11] = util.formatFit(theilSenWeighted);
+		const values = [
+			userName,
+			`${result.pp} [${result.ppRange.join(', ')}]`,
+			util.toPercent(stable),
+			util.toPercent(mean),
+			util.toPercent(median),
+			util.toPercent(iqm),
+			splitMedian.map(util.toPercent).join(' -> '),
+			splitIQM.map(util.toPercent).join(' -> '),
+			iqr.reverse().map(util.toPercent).join(' -> '),
+			util.formatFit(linearRegression),
+			util.formatFit(theilSen),
+			util.formatFit(theilSenWeighted),
+		];
 
-		console.log(formatRow(cells));
+		console.log(formatValues(values));
+		if (argv.format !== 'markdown' && argv.format !== 'csv') {
+			console.log('');
+		}
 	}
 
 	Profiler.log('app_total', t);
 
-	console.log(`\n${Profiler}`);
+	if (argv.debug) {
+		console.error(`\n${Profiler}`);
+	}
 }
 
 process.on('unhandledRejection', function (err) {
