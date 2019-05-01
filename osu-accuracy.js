@@ -162,13 +162,15 @@ async function runCli() {
 
 	const Widths = {
 		NAME: 18,
-		PP: 19,
+		PP: 6,
+		PP_DOUBLE: 12,
 		SINGLE: 8,
 		DOUBLE: 19,
+		FIT: 35,
 	};
 
 	const columnHeaders = [`osu! username`, `pp`, `Diff. range`, `W. Mean`, `Mean`, `Median`, `IQM`, `Split median`, `Split IQM`, `IQR`, `LSQ`, `Theil-Sen`, `W. Theil-Sen`];
-	const columnTypes = [`name`, `pp`, `double`, `single`, `single`, `single`, `single`, `double`, `double`, `double`, `double`, `double`, `double`];
+	const columnTypes = [`name`, `pp`, `pp_double`, `single`, `single`, `single`, `single`, `double`, `double`, `double`, `fit`, `fit`, `fit`];
 	const NULL_VALUES = Array.from({length: 13}, () => `N/A`);
 
 	const CELL_SIZES = columnTypes.map(type => Widths[type.toUpperCase()]);
