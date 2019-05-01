@@ -34,6 +34,8 @@ Usage
 
 	node osu-accuracy --format=markdown osu!name
 
+	node osu-accuracy --fit-style=slope-intercept osu!name
+
 	node osu-accuracy --debug=true osu!name
 
 License

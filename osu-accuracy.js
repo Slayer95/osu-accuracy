@@ -166,7 +166,7 @@ async function runCli() {
 		PP_DOUBLE: 12,
 		SINGLE: 8,
 		DOUBLE: 19,
-		FIT: 35,
+		FIT: 50,
 	};
 
 	const columnHeaders = [`osu! username`, `pp`, `Diff. range`, `W. Mean`, `Mean`, `Median`, `IQM`, `IQR`, `Split median`, `Split IQM`, `LSQ`, `Theil-Sen`, `W. Theil-Sen`];
@@ -220,9 +220,9 @@ async function runCli() {
 			iqr.reverse().map(util.toPercent).join(' -> '),
 			splitMedian.map(util.toPercent).join(' -> '),
 			splitIQM.map(util.toPercent).join(' -> '),
-			util.formatFit(linearRegression),
-			util.formatFit(theilSen),
-			util.formatFit(theilSenWeighted),
+			util.formatFit(linearRegression.equation, linearRegression, argv['fit-style']),
+			util.formatFit(theilSen.equation, theilSen, argv.fit_style),
+			util.formatFit(theilSenWeighted.equation, theilSenWeighted, argv['fit-style']),
 		];
 
 		console.log(formatValues(values));
