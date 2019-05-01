@@ -221,7 +221,7 @@ async function runCli() {
 			splitMedian.map(util.toPercent).join(' -> '),
 			splitIQM.map(util.toPercent).join(' -> '),
 			util.formatFit(linearRegression.equation, linearRegression, argv['fit-style']),
-			util.formatFit(theilSen.equation, theilSen, argv.fit_style),
+			util.formatFit(theilSen.equation, theilSen, argv['fit-style']),
 			util.formatFit(theilSenWeighted.equation, theilSenWeighted, argv['fit-style']),
 		];
 
