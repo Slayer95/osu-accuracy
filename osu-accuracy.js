@@ -1,5 +1,6 @@
 "use strict";
 
+const stats = require('./lib/stats');
 const util = require('./lib/util');
 const Profiler = require('./lib/profiler');
 
@@ -14,59 +15,22 @@ const Collator = {
 
 function getAverageAccuracy(scoresList) {
 	if (!scoresList.length) return NaN;
-	let sum = 0;
-	for (const playData of scoresList) {
-		sum += playData.accuracy;
-	}
-
-	return sum / scoresList.length;
+	return stats.arithmetic_mean(scoresList.map(x => x.accuracy));
 }
 
 function getMedianAccuracy(scoresList) {
 	if (!scoresList.length) return NaN;
-
-	const modulus = scoresList.length % 2;
-	const halfLength = (scoresList.length - modulus) / 2;
-
-	if (modulus) {
-		return scoresList[halfLength].accuracy;
-	}
-
-	return (scoresList[halfLength - 1].accuracy + scoresList[halfLength].accuracy) / 2;
+	return stats.sorted.median(scoresList.map(x => x.accuracy));
 }
 
 function getIQRAccuracy(scoresList) {
 	if (!scoresList.length) return [];
-
-	const modulus = scoresList.length % 2;
-	const halfLength = (scoresList.length - modulus) / 2;
-
-	const sets = [scoresList.slice(0, halfLength), scoresList.slice(-halfLength)];
-	return sets.map(getMedianAccuracy);
+	return stats.sorted.iqr(scoresList.map(x => x.accuracy));
 }
 
 function getIQMAccuracy(scoresList) {
-	const modulus = scoresList.length % 4;
-	const outerSize = (scoresList.length - modulus) / 4;
-
-	scoresList = scoresList.slice(outerSize, scoresList.length - outerSize);
-	if (!modulus) {
-		return getAverageAccuracy(scoresList);
-	}
-
-	const limitPlays = [scoresList.pop(), scoresList.shift()];
-	const innerPlays = scoresList;
-
-	const limitWeight = 1 - modulus / 4;
-	const totalWeight = innerPlays.length +  2 - modulus / 2;
-
-	let sum = 0;
-	for (const playData of innerPlays) {
-		sum += playData.accuracy;
-	}
-	sum += limitPlays[0].accuracy * limitWeight;
-	sum += limitPlays[1].accuracy * limitWeight;
-	return sum / totalWeight;
+	if (!scoresList.length) return NaN;
+	return stats.sorted.iqm(scoresList.map(x => x.accuracy));
 }
 
 async function fillPlayerPerformance(scoresList, sequential) {
@@ -125,24 +89,26 @@ async function getPlayerPerformanceMetrics(userId) {
 	const playerPerformance = await fetchPlayerPerformanceData(userId);
 	if (!playerPerformance) return null;
 
+	const topPlays = playerPerformance.topPlays;
+
 	const t = process.hrtime();
 
-	const minPP = Math.min(...playerPerformance.topPlays.map(x => x.maxpp));
-	const maxPP = Math.max(...playerPerformance.topPlays.map(x => x.maxpp));
+	const minPP = stats.min(topPlays.map(x => x.maxpp));
+	const maxPP = stats.max(topPlays.map(x => x.maxpp));
 
-	playerPerformance.topPlays.sort(Collator.accuracy);
-	const minAccuracy = Math.min(...playerPerformance.topPlays.map(x => x.accuracy));
-	const maxAccuracy = Math.max(...playerPerformance.topPlays.map(x => x.accuracy));
-	const medianAccuracy = getMedianAccuracy(playerPerformance.topPlays);
-	const iqrAccuracy = getIQRAccuracy(playerPerformance.topPlays);
+	topPlays.sort(Collator.accuracy);
+	const minAccuracy = stats.min(topPlays.map(x => x.accuracy));
+	const maxAccuracy = stats.max(topPlays.map(x => x.accuracy));
+	const medianAccuracy = getMedianAccuracy(topPlays);
+	const iqrAccuracy = getIQRAccuracy(topPlays);
 
-	const meanAccuracy = getAverageAccuracy(playerPerformance.topPlays);
-	const iqmAccuracy = getIQMAccuracy(playerPerformance.topPlays);
+	const meanAccuracy = getAverageAccuracy(topPlays);
+	const iqmAccuracy = getIQMAccuracy(topPlays);
 
-	playerPerformance.topPlays.sort(Collator.difficulty);
+	topPlays.sort(Collator.difficulty);
 
-	const easyPlays = playerPerformance.topPlays.splice(Math.ceil(playerPerformance.topPlays.length / 2)).sort(Collator.accuracy);
-	const hardPlays = playerPerformance.topPlays.sort(Collator.accuracy);
+	const easyPlays = topPlays.splice(Math.ceil(topPlays.length / 2)).sort(Collator.accuracy);
+	const hardPlays = topPlays.sort(Collator.accuracy);
 
 	const stableAccuracy = playerPerformance.accuracy;
 	const splitMedianAccuracy = [easyPlays, hardPlays].map(getMedianAccuracy);
