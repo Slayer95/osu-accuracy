@@ -30,6 +30,12 @@ Usage
 
 	node osu-accuracy "user1, user2, user3, user4"
 
+	node osu-accuracy --format=csv osu!name
+
+	node osu-accuracy --format=markdown osu!name
+
+	node osu-accuracy --debug=true osu!name
+
 License
 ------------------------------------------------------------------------
 
