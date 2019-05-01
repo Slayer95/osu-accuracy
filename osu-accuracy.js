@@ -106,6 +106,10 @@ async function getPlayerPerformanceMetrics(userId) {
 	const iqmAccuracy = getIQMAccuracy(topPlays);
 
 	topPlays.sort(Collator.difficulty);
+	const accuracyVsPPDataset = topPlays.map(x => [x.maxpp, x.accuracy]);
+	const linearRegression = stats.lsq_regression(accuracyVsPPDataset);
+	const theilSen = stats.sorted.theil_sen(accuracyVsPPDataset);
+	const theilSenWeighted = stats.sorted.theil_sen_weighted(accuracyVsPPDataset);
 
 	const easyPlays = topPlays.splice(Math.ceil(topPlays.length / 2)).sort(Collator.accuracy);
 	const hardPlays = topPlays.sort(Collator.accuracy);
@@ -126,9 +130,14 @@ async function getPlayerPerformanceMetrics(userId) {
 			mean: meanAccuracy,
 			median: medianAccuracy,
 			iqm: iqmAccuracy,
+			iqr: iqrAccuracy,
+		},
+		accuracyVsPP: {
 			splitMedian: splitMedianAccuracy,
 			splitIQM: splitIQMAccuracy,
-			iqr: iqrAccuracy,
+			linearRegression,
+			theilSen,
+			theilSenWeighted,
 		},
 		level: playerPerformance.level,
 	};
@@ -155,23 +164,24 @@ async function runCli() {
 		DOUBLE: 19,
 	};
 
-	const columnHeaders = [`osu! username`, `pp, diff. range`, `W. Mean`, `Mean`, `Median`, `IQM`, `Split median`, `Split IQM`, `IQR`];
-	const columnTypes = [`name`, `pp`, `single`, `single`, `single`, `single`, `double`, `double`, `double`];
+	const columnHeaders = [`osu! username`, `pp, diff. range`, `W. Mean`, `Mean`, `Median`, `IQM`, `Split median`, `Split IQM`, `IQR`, `LSQ`, `Theil-Sen`, `W. Theil-Sen`];
+	const columnTypes = [`name`, `pp`, `single`, `single`, `single`, `single`, `double`, `double`, `double`, `double`, `double`, `double`];
 	const CELL_SIZES = columnTypes.map(type => Widths[type.toUpperCase()]);
 	const formatCell = (cell, index) => util.padString(` ${cell}`, CELL_SIZES[index]);
 	const formatRow = row => row.map(formatCell).join(`|`);
 
 	console.log(formatRow(columnHeaders));
-	console.log(Array.from({length: 9}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
+	console.log(Array.from({length: 12}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
 
 	for (const userName of userList) {
 		const result = await getPlayerPerformanceMetrics(userName);
-		const cells = [userName, `N/A`, `N/A`, `N/A`, `N/A`, `N/A`, `N/A`, `N/A`, `N/A`];
+		const cells = Array.from({length: 12}, (_, index) => index ? `N/A` : userName);
 		if (!result) {
 			console.log(formatRow(cells));
 			continue;
 		}
-		const {stable, mean, median, iqm, splitMedian, splitIQM, iqr} = result.accuracy;
+		const {stable, mean, median, iqm, iqr} = result.accuracy;
+		const {splitMedian, splitIQM, linearRegression, theilSen, theilSenWeighted} = result.accuracyVsPP;
 		cells[1] = `${result.pp} [${result.ppRange.join(', ')}]`;
 		cells[2] = util.toPercent(stable);
 		cells[3] = util.toPercent(mean);
@@ -180,6 +190,9 @@ async function runCli() {
 		cells[6] = splitMedian.map(util.toPercent).join(' -> ');
 		cells[7] = splitIQM.map(util.toPercent).join(' -> ');
 		cells[8] = iqr.reverse().map(util.toPercent).join(' -> ');
+		cells[9] = util.formatFit(linearRegression);
+		cells[10] = util.formatFit(theilSen);
+		cells[11] = util.formatFit(theilSenWeighted);
 
 		console.log(formatRow(cells));
 	}
