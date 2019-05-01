@@ -167,9 +167,9 @@ async function runCli() {
 		DOUBLE: 19,
 	};
 
-	const columnHeaders = [`osu! username`, `pp, diff. range`, `W. Mean`, `Mean`, `Median`, `IQM`, `Split median`, `Split IQM`, `IQR`, `LSQ`, `Theil-Sen`, `W. Theil-Sen`];
-	const columnTypes = [`name`, `pp`, `single`, `single`, `single`, `single`, `double`, `double`, `double`, `double`, `double`, `double`];
-	const NULL_VALUES = Array.from({length: 12}, () => `N/A`);
+	const columnHeaders = [`osu! username`, `pp`, `Diff. range`, `W. Mean`, `Mean`, `Median`, `IQM`, `Split median`, `Split IQM`, `IQR`, `LSQ`, `Theil-Sen`, `W. Theil-Sen`];
+	const columnTypes = [`name`, `pp`, `double`, `single`, `single`, `single`, `single`, `double`, `double`, `double`, `double`, `double`, `double`];
+	const NULL_VALUES = Array.from({length: 13}, () => `N/A`);
 
 	const CELL_SIZES = columnTypes.map(type => Widths[type.toUpperCase()]);
 	const formatMarkdownCell = (cell, index) => util.padString(` ${cell}`, CELL_SIZES[index]);
@@ -195,7 +195,7 @@ async function runCli() {
 		console.log(formatValues(columnHeaders));
 	}
 	if (argv.format === 'markdown') {
-		console.log(Array.from({length: 12}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
+		console.log(Array.from({length: 13}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
 	}
 
 	for (const userName of userList) {
@@ -209,7 +209,8 @@ async function runCli() {
 		const {splitMedian, splitIQM, linearRegression, theilSen, theilSenWeighted} = result.accuracyVsPP;
 		const values = [
 			userName,
-			`${result.pp} [${result.ppRange.join(', ')}]`,
+			`${result.pp}`,
+			`[${result.ppRange.join(', ')}]`,
 			util.toPercent(stable),
 			util.toPercent(mean),
 			util.toPercent(median),
