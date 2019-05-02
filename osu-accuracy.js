@@ -153,6 +153,10 @@ async function runCli() {
 		throw new Error(`Specify the user names as a command line argument (comma-separated list)`);
 	}
 
+	if (argv.debug) {
+		Profiler.setDebug(true);
+	}
+
 	const t = process.hrtime();
 	CACHE.start();
 
