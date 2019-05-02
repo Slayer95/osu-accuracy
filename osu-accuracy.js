@@ -149,7 +149,7 @@ async function runCli() {
 	}
 
 	const userList = argv._[0].split(',').map(name => name.trim());
-	if (userList.some(userName => /[^a-z0-9_\s-\[\]]/i.test(userName))) {
+	if (userList.some(userName => /[^a-z0-9_\s-[\]]/i.test(userName))) {
 		throw new Error(`Specify the user names as a command line argument (comma-separated list)`);
 	}
 
