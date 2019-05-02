@@ -51,6 +51,10 @@ async function getBeatmapReadableLocal(mapId, metaData) {
 }
 
 async function getBeatmapReadable(mapId) {
+	if (!CACHE.fsSongsPath) {
+		return getBeatmapReadableRemote(mapId);
+	}
+
 	let metaData = null;
 	if (CACHE.metadata.has(mapId)) {
 		const [setId, artist, title, creator, version] = CACHE.metadata.get(mapId);
@@ -63,7 +67,6 @@ async function getBeatmapReadable(mapId) {
 
 		CACHE.metadata.set(mapId, [metaData.setId, metaData.artist, metaData.title, metaData.creator, metaData.version]);
 	}
-
 
 	if (!CACHE.local_map_sets.has(metaData.setId)) {
 		return getBeatmapReadableRemote(mapId);

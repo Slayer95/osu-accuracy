@@ -63,35 +63,30 @@ async function fillPlayerPerformance(scoresList, sequential) {
 	}
 }
 
-async function fetchPlayerPerformanceData(userId) {
+async function fetchPlayerPerformanceData(userName) {
 	const {client, constants} = api.nodesu;
 
-	let t = process.hrtime();
 	const [userData, topPlays] = await Promise.all([
-		client.user.get(userId, constants.MODE.osu, 0, constants.LOOKUP_TYPE.string),
-		client.user.getBest(userId, constants.MODE.osu, 100, constants.LOOKUP_TYPE.string),
+		client.user.get(userName, constants.MODE.osu, 0, constants.LOOKUP_TYPE.string),
+		client.user.getBest(userName, constants.MODE.osu, 100, constants.LOOKUP_TYPE.string),
 	]);
-	Profiler.logN('osu_api', 2, t);
 
 	if (!userData || !topPlays || !topPlays.length) {
 		return null;
 	}
 
-	await fillPlayerPerformance(topPlays, false); // false = parallel, true = sequential
-
 	return {
 		pp: Math.round(userData.ppRaw),
 		accuracy: userData.accuracy / 100,
 		level: userData.level,
-		topPlays: topPlays.filter(playData => playData.maxpp && playData.accuracy),
+		topPlays: topPlays,
 	};
 }
 
-async function getPlayerPerformanceMetrics(userId) {
-	const playerPerformance = await fetchPlayerPerformanceData(userId);
-	if (!playerPerformance) return null;
-
-	const topPlays = playerPerformance.topPlays;
+async function getPlayerPerformanceMetrics(perfData) {
+	await fillPlayerPerformance(perfData.topPlays, false);
+	const topPlays = perfData.topPlays.filter(playData => playData.maxpp && playData.accuracy);
+	if (!topPlays.length) return null;
 
 	const t = process.hrtime();
 
@@ -116,14 +111,14 @@ async function getPlayerPerformanceMetrics(userId) {
 	const easyPlays = topPlays.splice(Math.ceil(topPlays.length / 2)).sort(Collator.accuracy);
 	const hardPlays = topPlays.sort(Collator.accuracy);
 
-	const stableAccuracy = playerPerformance.accuracy;
+	const stableAccuracy = perfData.accuracy;
 	const splitMedianAccuracy = [easyPlays, hardPlays].map(getMedianAccuracy);
 	const splitIQMAccuracy = [easyPlays, hardPlays].map(getIQMAccuracy);
 
 	Profiler.log('accuracy_calc', t);
 
 	return {
-		pp: playerPerformance.pp,
+		pp: perfData.pp,
 		ppRange: [minPP, maxPP].map(x => Math.round(x)),
 		accuracy: {
 			min: minAccuracy,
@@ -142,7 +137,7 @@ async function getPlayerPerformanceMetrics(userId) {
 			theilSen,
 			theilSenWeighted,
 		},
-		level: playerPerformance.level,
+		level: perfData.level,
 	};
 }
 
@@ -173,7 +168,8 @@ async function runCli() {
 
 	const columnHeaders = [`osu! username`, `pp`, `Diff. range`, `W. Mean`, `Mean`, `Median`, `IQM`, `IQR`, `Split median`, `Split IQM`, `LSQ`, `Theil-Sen`, `W. Theil-Sen`, `Data`];
 	const columnTypes = [`name`, `pp`, `pp_double`, `single`, `single`, `single`, `single`, `double`, `double`, `double`, `fit`, `fit`, `fit`, `data`];
-	const NULL_VALUES = Array.from({length: 14}, () => `N/A`);
+	const NULL_VALUES = columnHeaders.map(() => `N/A`);
+	const ERR_VALUES = columnHeaders.map(() => `ERR`);
 
 	const CELL_SIZES = columnTypes.map(type => Widths[type.toUpperCase()]);
 	const formatMarkdownCell = (cell, index) => util.padString(` ${cell}`, CELL_SIZES[index]);
@@ -199,13 +195,25 @@ async function runCli() {
 		console.log(formatValues(columnHeaders));
 	}
 	if (argv.format === 'markdown') {
-		console.log(Array.from({length: 14}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
+		console.log(columnHeaders.map((_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
 	}
 
-	for (const userName of userList) {
-		const result = await getPlayerPerformanceMetrics(userName);
-		if (!result) {
+	const apiT = process.hrtime();
+	const perfPromises = userList.map(fetchPlayerPerformanceData);
+	Promise.all(perfPromises).catch(err => null).then(() => {
+		Profiler.logN('osu_api_parallel', 2 * userList.length, apiT, true);
+	});
+
+	for (const [userName, perfPromise] of util.getTuples(userList, perfPromises)) {
+		const perfData = await perfPromise;
+		if (!perfData) {
 			const values = NULL_VALUES.slice().fill(userName, 0, 1);
+			console.log(formatValues(values));
+			continue;
+		}
+		const result = await getPlayerPerformanceMetrics(perfData);
+		if (!result) {
+			const values = ERR_VALUES.slice().fill(userName, 0, 1);
 			console.log(formatValues(values));
 			continue;
 		}
