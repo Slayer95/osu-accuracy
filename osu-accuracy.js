@@ -135,6 +135,7 @@ async function getPlayerPerformanceMetrics(userId) {
 			iqr: iqrAccuracy,
 		},
 		accuracyVsPP: {
+			dataset: accuracyVsPPDataset.map(([x, y]) => [x.toFixed(1), util.toPercent(y)]),
 			splitMedian: splitMedianAccuracy,
 			splitIQM: splitIQMAccuracy,
 			linearRegression,
@@ -167,11 +168,12 @@ async function runCli() {
 		SINGLE: 8,
 		DOUBLE: 19,
 		FIT: 50,
+		DATA: 1500,
 	};
 
-	const columnHeaders = [`osu! username`, `pp`, `Diff. range`, `W. Mean`, `Mean`, `Median`, `IQM`, `IQR`, `Split median`, `Split IQM`, `LSQ`, `Theil-Sen`, `W. Theil-Sen`];
-	const columnTypes = [`name`, `pp`, `pp_double`, `single`, `single`, `single`, `single`, `double`, `double`, `double`, `fit`, `fit`, `fit`];
-	const NULL_VALUES = Array.from({length: 13}, () => `N/A`);
+	const columnHeaders = [`osu! username`, `pp`, `Diff. range`, `W. Mean`, `Mean`, `Median`, `IQM`, `IQR`, `Split median`, `Split IQM`, `LSQ`, `Theil-Sen`, `W. Theil-Sen`, `Data`];
+	const columnTypes = [`name`, `pp`, `pp_double`, `single`, `single`, `single`, `single`, `double`, `double`, `double`, `fit`, `fit`, `fit`, `data`];
+	const NULL_VALUES = Array.from({length: 14}, () => `N/A`);
 
 	const CELL_SIZES = columnTypes.map(type => Widths[type.toUpperCase()]);
 	const formatMarkdownCell = (cell, index) => util.padString(` ${cell}`, CELL_SIZES[index]);
@@ -197,7 +199,7 @@ async function runCli() {
 		console.log(formatValues(columnHeaders));
 	}
 	if (argv.format === 'markdown') {
-		console.log(Array.from({length: 13}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
+		console.log(Array.from({length: 14}, (_, index) => '-'.repeat(CELL_SIZES[index])).join(`|`));
 	}
 
 	for (const userName of userList) {
@@ -208,7 +210,7 @@ async function runCli() {
 			continue;
 		}
 		const {stable, mean, median, iqm, iqr} = result.accuracy;
-		const {splitMedian, splitIQM, linearRegression, theilSen, theilSenWeighted} = result.accuracyVsPP;
+		const {splitMedian, splitIQM, linearRegression, theilSen, theilSenWeighted, dataset} = result.accuracyVsPP;
 		const values = [
 			userName,
 			`${result.pp}`,
@@ -223,6 +225,7 @@ async function runCli() {
 			util.formatFit(linearRegression.equation, linearRegression, argv['fit-style']),
 			util.formatFit(theilSen.equation, theilSen, argv['fit-style']),
 			util.formatFit(theilSenWeighted.equation, theilSenWeighted, argv['fit-style']),
+			dataset.map(tuple => tuple.join(' ')).join(';'),
 		];
 
 		console.log(formatValues(values));
