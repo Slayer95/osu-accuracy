@@ -130,7 +130,7 @@ async function getPlayerPerformanceMetrics(perfData) {
 			iqr: iqrAccuracy,
 		},
 		accuracyVsPP: {
-			dataset: accuracyVsPPDataset.map(([x, y]) => [x.toFixed(1), util.toPercent(y)]),
+			dataset: accuracyVsPPDataset.map(([x, y]) => [util.round(x, 1), util.round(util.scalePercent(y), 2)]),
 			splitMedian: splitMedianAccuracy,
 			splitIQM: splitIQMAccuracy,
 			linearRegression,
@@ -237,7 +237,13 @@ async function runCli() {
 			util.formatFit(linearRegression.equation, linearRegression, argv['fit-style']),
 			util.formatFit(theilSen.equation, theilSen, argv['fit-style']),
 			util.formatFit(theilSenWeighted.equation, theilSenWeighted, argv['fit-style']),
-			dataset.map(tuple => tuple.join(' ')).join(';'),
+			(() => {
+				switch (argv['dataset-format']) {
+				case 'json': return JSON.stringify(dataset);
+				case 'wolfram': return '{' + dataset.map(tuple => '{' + tuple.join(', ') + '}').join(`, `) + '}';
+				default: return dataset.map(([x, y]) => `${x} ${y}%`).join(';');
+				}
+			})(dataset),
 		];
 
 		console.log(formatValues(values));
