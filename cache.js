@@ -14,6 +14,28 @@ const CACHE = {
 	local_map_sets: new Set(),
 	metadata: new Map(),
 	difficulties: new Map(),
+
+	getMetaData(mapId) {
+		if (this.metadata.has(mapId)) {
+			const [
+				setId, artist, title, creator, version,
+				maxCombo, diffApproach, diffOverall, diffAim, diffSpeed,
+			] = this.metadata.get(mapId);
+
+			return {
+				setId, artist, title, creator, version,
+				maxCombo, diffApproach, diffOverall, diffAim, diffSpeed,
+			};
+		}
+
+		return null;
+	},
+	setMetaData(mapId, metaData) {
+		this.metadata.set(mapId, [
+			metaData.setId, metaData.artist, metaData.title, metaData.creator, metaData.version,
+			metaData.maxCombo, metaData.diffApproach, metaData.diffOverall, metaData.diffAim, metaData.diffSpeed,
+		]);
+	},
 };
 
 const CACHE_PATHS = {

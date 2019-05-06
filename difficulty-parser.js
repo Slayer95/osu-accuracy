@@ -5,24 +5,11 @@ const https = require('https');
 const path = require('path');
 
 const api = require('./api');
-
 const util = require('./lib/util');
-const Profiler = require('./lib/profiler');
-const Splitter = require('./lib/stream-splitter');
 
 const CACHE = require('./cache');
-
-// Applies to nodesu as well
-https.globalAgent.keepAlive = true;
-https.globalAgent.maxSockets = 8;
-
-async function getBeatmapMetaRemote(mapId) {
-	const t = process.hrtime();
-	const matches = await api.nodesu.client.beatmaps.getByBeatmapId(mapId);
-	Profiler.log('osu_api', t);
-	if (!matches.length) return null;
-	return matches[0];
-}
+const Profiler = require('./lib/profiler');
+const Splitter = require('./lib/stream-splitter');
 
 async function getBeatmapReadableRemote(mapId) {
 	const href = `https://osu.ppy.sh/osu/${mapId}`;
@@ -55,17 +42,13 @@ async function getBeatmapReadable(mapId) {
 		return getBeatmapReadableRemote(mapId);
 	}
 
-	let metaData = null;
-	if (CACHE.metadata.has(mapId)) {
-		const [setId, artist, title, creator, version] = CACHE.metadata.get(mapId);
-		metaData = {setId, artist, title, creator, version};
-	} else {
-		metaData = await getBeatmapMetaRemote(mapId);
+	let metaData = CACHE.getMetaData(mapId);
+	if (!metaData) {
+		metaData = await api.getBeatmapMeta(mapId);
 		if (!metaData) {
 			throw new Error(`Failed to fetch metadata for ${mapId}`);
 		}
-
-		CACHE.metadata.set(mapId, [metaData.setId, metaData.artist, metaData.title, metaData.creator, metaData.version]);
+		CACHE.setMetaData(mapId, metaData);
 	}
 
 	if (!CACHE.local_map_sets.has(metaData.setId)) {
@@ -80,8 +63,13 @@ async function getBeatmapReadable(mapId) {
 	}
 }
 
-async function getBeatmap(mapId) {
-	const readable = await getBeatmapReadable(mapId);
+async function getBeatmap(mapId, metaData, forceLocal) {
+	let readable;
+	if (forceLocal) {
+		readable = await getBeatmapReadableLocal(mapId, metaData);
+	} else {
+		readable = await getBeatmapReadable(mapId);
+	}
 	return new Promise((resolve, reject) => {
 		const parser = new api.ojsama.parser();
 		readable.pipe(new Splitter(Buffer.from('\n')))
@@ -91,25 +79,38 @@ async function getBeatmap(mapId) {
 	});
 }
 
-async function getModdedBeatmapMaxPP(playData) {
+async function getMaxPPInner(playData, algo) {
+	const {mapId /* number */, mods /* number */} = playData; // eslint-disable-line object-curly-spacing
+	const map = await getBeatmap(mapId);
+	const diff = new api.ojsama.diff().calc({map, mods});
+	const params = util.ojsamaDiff2Params(diff, algo);
+	//const result_diff = api.ojsama.ppv2({stars: diff, score_version: algo || 1});
+	const result_params = api.ojsama.ppv2(params);
+	//assert.deepStrictEqual(result_diff, result_params, `Bad ojsamaDiff2Params: ${result_diff} !== ${result_params} (${JSON.stringify(diff)} !== ${JSON.stringify(params)})`);
+	return Math.round(result_params.total * 10) / 10;
+}
+
+async function getMaxPP(playData, algo, ignoreCache = true) {
 	const {mapId /* number */, mods /* number */} = playData; // eslint-disable-line object-curly-spacing
 	const cacheTag = `${mapId},${mods}`;
 
-	if (CACHE.difficulties.has(cacheTag)) {
-		return Promise.resolve(CACHE.difficulties.get(cacheTag));
+	if (!ignoreCache && CACHE.difficulties.has(cacheTag)) {
+		return CACHE.difficulties.get(cacheTag);
 	}
 
-	const map = await getBeatmap(mapId);
-
-	const moddedMap = new api.ojsama.diff().calc({map, mods});
-	const ppParameters = api.ojsama.ppv2({stars: moddedMap});
-	const maxPP = Math.round(ppParameters.total * 10) / 10;
-	CACHE.difficulties.set(cacheTag, maxPP);
+	const maxPP = await getMaxPPInner(playData, algo);
+	if (!ignoreCache) {
+		CACHE.difficulties.set(cacheTag, maxPP);
+	}
 	return maxPP;
 }
 
+getBeatmapReadable.local = getBeatmapReadableLocal;
+getBeatmapReadable.remote = getBeatmapReadableRemote;
+
 module.exports = {
-	getReadable: getBeatmapReadable,
-	get: getBeatmap,
-	getModdedMaxPP: getModdedBeatmapMaxPP,
+	getBeatmap,
+	getBeatmapReadable,
+	getMaxPP,
+	getMaxPPInner,
 };

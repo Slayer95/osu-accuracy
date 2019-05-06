@@ -8,7 +8,7 @@ const Profiler = require('./lib/profiler');
 
 const api = require('./api');
 const CACHE = require('./cache');
-const BeatMaps = require('./beatmaps');
+const Difficulty = require('./difficulty');
 
 const Collator = {
 	difficulty: (a, b) => b.maxpp - a.maxpp, // Descendent
@@ -40,7 +40,7 @@ async function fillPlayerPerformance(scoresList, sequential) {
 		for (const playData of scoresList) {
 			playData.accuracy = util.getAccuracy(playData);
 			try {
-				playData.maxpp = await BeatMaps.getModdedMaxPP(util.nodesu2ojsamaScore(playData));
+				playData.maxpp = await Difficulty.parser.getMaxPP(util.nodesu2ojsamaScore(playData));
 			} catch (err) {
 				Profiler.log('score_failure');
 			}
@@ -52,7 +52,7 @@ async function fillPlayerPerformance(scoresList, sequential) {
 		for (const playData of scoresList) {
 			playData.accuracy = util.getAccuracy(playData);
 			// eslint-disable-next-line no-sequences
-			queries.push(BeatMaps.getModdedMaxPP(util.nodesu2ojsamaScore(playData)).catch(err => (Profiler.logSync('score_failure'), null)));
+			queries.push(Difficulty.parser.getMaxPP(util.nodesu2ojsamaScore(playData)).catch(err => (console.error(err.stack), Profiler.logSync('score_failure'), null)));
 		}
 		const maxPPs = await Promise.all(queries);
 		Profiler.setParallel(false);
@@ -64,11 +64,9 @@ async function fillPlayerPerformance(scoresList, sequential) {
 }
 
 async function fetchPlayerPerformanceData(userName) {
-	const {client, constants} = api.nodesu;
-
 	const [userData, topPlays] = await Promise.all([
-		client.user.get(userName, constants.MODE.osu, 0, constants.LOOKUP_TYPE.string),
-		client.user.getBest(userName, constants.MODE.osu, 100, constants.LOOKUP_TYPE.string),
+		api.getUser(userName),
+		api.getUserBest(userName),
 	]);
 
 	if (!userData || !topPlays || !topPlays.length) {
